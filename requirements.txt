@@ -1,0 +1,6 @@
+aiogram
+selenium
+webdriver-manager
+aiohttp
+gspread
+google-auth
