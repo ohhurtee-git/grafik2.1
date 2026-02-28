@@ -28,6 +28,9 @@ TOKEN = "8177741538:AAEqlEsJomzv8Sx7e-5jcM11gp05F5bHvtQ"
 DTEK_URL = "https://www.dtek-dnem.com.ua/ua/shutdowns"
 CHECK_INTERVAL = 300  # 300 секунд = 5 хвилин
 
+# 🔴 ВПИШИ СЮДИ СВІЙ TELEGRAM ID ДЛЯ РОЗСИЛКИ:
+ADMIN_ID = 123456789 
+
 # 🛠 РЕЖИМ РАБОТЫ
 IS_LOCAL_TESTING = False  # ОБЯЗАТЕЛЬНО FALSE ДЛЯ СЕРВЕРА
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -81,7 +84,7 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # --- 📊 ГУГЛ ТАБЛИЦЫ ---
-def log_to_sheets(user_name, username, action):
+def log_to_sheets(user_id, user_name, username, action):
     try:
         creds_json = os.environ.get("GOOGLE_CREDENTIALS")
         sheet_id = os.environ.get("SPREADSHEET_ID")
@@ -102,13 +105,14 @@ def log_to_sheets(user_name, username, action):
         now = (datetime.now(timezone.utc) + timedelta(hours=2)).strftime("%d.%m.%Y %H:%M:%S")
         uname = f"@{username}" if username else "Скрыт" 
         
-        row = [now, user_name, uname, action]
+        # Додали user_id п'ятим стовпцем
+        row = [now, user_name, uname, action, str(user_id)]
         sheet.append_row(row)
     except Exception as e:
         print(f"⚠️ Ошибка записи в таблицу: {e}")
 
-async def async_log(user_name, username, action):
-    await asyncio.to_thread(log_to_sheets, user_name, username, action)
+async def async_log(user_id, user_name, username, action):
+    await asyncio.to_thread(log_to_sheets, user_id, user_name, username, action)
 
 # --- 🚀 УПРАВЛЕНИЕ БРАУЗЕРОМ ---
 def close_browser():
@@ -268,19 +272,15 @@ def sync_parse_dtek(addr_key, addr):
         try:
             clicked_text = driver.execute_script("""
                 var els = Array.from(document.querySelectorAll('*')).reverse();
-                
-                // Шукаємо елемент, у якого є слово "завтра", але СУВОРО немає слова "сьогодні"
                 var target = els.find(e => {
                     var txt = (e.innerText || "").toLowerCase();
                     return txt.includes("завтра") && !txt.includes("сьогодні");
                 });
                 
                 if (target) {
-                    // Симулюємо повноцінний клік мишкою
                     target.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
                     try { target.click(); } catch(e) {}
                     
-                    // Часто клік працює на батьківському блоці
                     if (target.parentElement) {
                         target.parentElement.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
                         try { target.parentElement.click(); } catch(e) {}
@@ -291,10 +291,9 @@ def sync_parse_dtek(addr_key, addr):
             """)
             
             if clicked_text:
-                time.sleep(3.5) # Даємо час сайту на підвантаження даних
+                time.sleep(3.5) 
                 nuke()
                 
-                # Знаходимо всі таблиці і беремо ОСТАННЮ ВИДИМУ
                 tables = driver.find_elements(By.CLASS_NAME, "table2col")
                 visible_tables = [t for t in tables if t.is_displayed()]
                 
@@ -306,7 +305,6 @@ def sync_parse_dtek(addr_key, addr):
                     path2 = os.path.join(BASE_DIR, f"photo_{addr_key}_tomorrow.png")
                     target2.screenshot(path2)
                     
-                    # Очищаємо текст (беремо тільки останній рядок, якщо їх декілька)
                     d2_txt = clicked_text.split('\n')[-1].strip()
                     if not d2_txt or len(d2_txt) > 30:
                         d2_txt = "Завтра"
@@ -447,48 +445,48 @@ def get_dnipro_kb():
 # --- 🤖 БОТ ХЕНДЛЕРЫ ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    asyncio.create_task(async_log(message.from_user.full_name, message.from_user.username, "🚀 Натиснув /start"))
+    asyncio.create_task(async_log(message.from_user.id, message.from_user.full_name, message.from_user.username, "🚀 Натиснув /start"))
     await message.answer("⚡ Фрафік на зв'язку! Обери населений пункт:", reply_markup=get_main_kb())
 
 @dp.message(F.text == "🔙 Назад")
 async def process_back(message: types.Message):
-    asyncio.create_task(async_log(message.from_user.full_name, message.from_user.username, "🔙 Повернувся назад"))
+    asyncio.create_task(async_log(message.from_user.id, message.from_user.full_name, message.from_user.username, "🔙 Повернувся назад"))
     await message.answer("Обери населений пункт:", reply_markup=get_main_kb())
 
 @dp.message(F.text == "🏠 Новомиколаївка")
 async def process_novo(message: types.Message):
-    asyncio.create_task(async_log(message.from_user.full_name, message.from_user.username, "🏠 Новомиколаївка"))
+    asyncio.create_task(async_log(message.from_user.id, message.from_user.full_name, message.from_user.username, "🏠 Новомиколаївка"))
     await perform_check(message.from_user.id, "addr1")
 
 @dp.message(F.text == "🏢 Дніпро")
 async def process_dnipro_menu(message: types.Message):
-    asyncio.create_task(async_log(message.from_user.full_name, message.from_user.username, "🏢 Відкрив меню Дніпра"))
+    asyncio.create_task(async_log(message.from_user.id, message.from_user.full_name, message.from_user.username, "🏢 Відкрив меню Дніпра"))
     await message.answer("📍 Оберіть вулицю в м. Дніпро:", reply_markup=get_dnipro_kb())
 
 @dp.message(F.text == "📍 Севастопольська, 16")
 async def process_dnipro_1(message: types.Message):
-    asyncio.create_task(async_log(message.from_user.full_name, message.from_user.username, "📍 Севастопольська"))
+    asyncio.create_task(async_log(message.from_user.id, message.from_user.full_name, message.from_user.username, "📍 Севастопольська"))
     await perform_check(message.from_user.id, "dnipro_1")
 
 @dp.message(F.text == "📍 просп. Мануйлівський, 78")
 async def process_dnipro_2(message: types.Message):
-    asyncio.create_task(async_log(message.from_user.full_name, message.from_user.username, "📍 Мануйлівський"))
+    asyncio.create_task(async_log(message.from_user.id, message.from_user.full_name, message.from_user.username, "📍 Мануйлівський"))
     await perform_check(message.from_user.id, "dnipro_2")
 
 @dp.message(F.text == "📍 вул. Мазепи Галини, 76")
 async def process_dnipro_3(message: types.Message):
-    asyncio.create_task(async_log(message.from_user.full_name, message.from_user.username, "📍 Мазепи Галини"))
+    asyncio.create_task(async_log(message.from_user.id, message.from_user.full_name, message.from_user.username, "📍 Мазепи Галини"))
     await perform_check(message.from_user.id, "dnipro_3")
 
 @dp.message(F.text == "📍 вул. Володимира Вернадського, 19/21")
 async def process_dnipro_4(message: types.Message):
-    asyncio.create_task(async_log(message.from_user.full_name, message.from_user.username, "📍 Вернадського"))
+    asyncio.create_task(async_log(message.from_user.id, message.from_user.full_name, message.from_user.username, "📍 Вернадського"))
     await perform_check(message.from_user.id, "dnipro_4")
 
 @dp.callback_query(F.data.startswith("tmr_"))
 async def process_tomorrow(callback: types.CallbackQuery):
     addr_key = callback.data.split("_", 1)[1]
-    asyncio.create_task(async_log(callback.from_user.full_name, callback.from_user.username, f"📅 Дивився на завтра ({addr_key})"))
+    asyncio.create_task(async_log(callback.from_user.id, callback.from_user.full_name, callback.from_user.username, f"📅 Дивився на завтра ({addr_key})"))
     
     data = STORAGE.get(addr_key)
     if data and data["parsed"] and data["parsed"]["tomorrow"]:
@@ -500,6 +498,62 @@ async def process_tomorrow(callback: types.CallbackQuery):
     else:
         await callback.answer("Графік на завтра відсутній.", show_alert=True)
     await callback.answer()
+
+# --- 📢 АДМІНСЬКА РОЗСИЛКА ---
+@dp.message(Command("broadcast"))
+async def cmd_broadcast(message: types.Message):
+    # Перевірка, чи це ти
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    text_to_send = message.text.replace("/broadcast", "").strip()
+    
+    if not text_to_send:
+        await message.answer("⚠️ Напиши текст розсилки після команди.\nПриклад: /broadcast Привіт, бот знову працює!")
+        return
+
+    await message.answer("🔄 Починаю розсилку... Збираю ID з Гугл Таблиці.")
+    
+    try:
+        creds_json = os.environ.get("GOOGLE_CREDENTIALS")
+        sheet_id = os.environ.get("SPREADSHEET_ID")
+        
+        if not creds_json or not sheet_id:
+            await message.answer("❌ Немає ключів від Гугл Таблиць! Розсилка неможлива.")
+            return
+
+        creds_dict = json.loads(creds_json)
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(sheet_id).sheet1
+        
+        # Беремо всі значення з 5-го стовпця (де тепер лежать ID)
+        all_ids = sheet.col_values(5) 
+        
+        # Прибираємо дублікати і заголовок стовпця
+        unique_ids = set()
+        for uid in all_ids:
+            if uid.isdigit(): 
+                unique_ids.add(int(uid))
+
+        if not unique_ids:
+            await message.answer("❌ В таблиці ще немає жодного ID. Люди повинні скористатися ботом хоча б раз після оновлення.")
+            return
+
+        success = 0
+        for uid in unique_ids:
+            try:
+                await bot.send_message(chat_id=uid, text=text_to_send)
+                success += 1
+                await asyncio.sleep(0.1) # Пауза антиспам
+            except Exception:
+                pass # Якщо юзер заблокував бота
+
+        await message.answer(f"✅ Розсилка завершена!\nУспішно відправлено: {success} юзерам.")
+        
+    except Exception as e:
+        await message.answer(f"❌ Помилка при розсилці: {e}")
 
 # --- 🌍 ВЕБ-СЕРВЕР ---
 async def health_check(request): return web.Response(text="Grafik is watching!", status=200)
